@@ -1,121 +1,142 @@
+/*--------------------------------------------
+Module Name : Humid_Control.ino
+
+REVISION HISTORY in GitHub:
+URL : https://github.com/embedded-weathering-with-you/today_is_sunny
+
+Description : 
+This code is for a smart Teru Teru Bozu bot.
+It uses a DHT11 sensor, a stepper motor, and a MAX7219 LED matrix.
+--------------------------------------------*/
+
+// Include necessary libraries
 #include "DHT.h"
+#include <LedControl.h>
 
+// DHT11 Sensor Configuration
+#define DHTPIN 6        // DHT sensor pin
+#define DHTTYPE DHT11   // DHT11 sensor type
 
-// DHT11 센서 설정
-#define DHTPIN 2        // DHT 센서 핀
-#define DHTTYPE DHT11   // DHT11 센서 타입
+// Stepper Motor Pin Configuration
+const int motorPin1 = 5;    // IN1
+const int motorPin2 = 4;    // IN2
+const int motorPin3 = 3;    // IN3
+const int motorPin4 = 2;    // IN4
 
+// MAX7219 Matrix LED Pin Configuration
+#define DIN 11
+#define CLK 13
+#define CS 10
 
-// 스텝 모터 신호핀 설정
-const int motorPin1 = 8;    // IN1
-const int motorPin2 = 9;    // IN2
-const int motorPin3 = 10;   // IN3
-const int motorPin4 = 11;   // IN4
+LedControl lc = LedControl(DIN, CLK, CS, 1);
 
-
-// 스텝 모터의 스텝 설정
+// Stepper Motor Steps Configuration
 const int steps[] = {B1000, B1100, B0100, B0110, B0010, B0011, B0001, B1001, B0000};
 
+// Stepper Motor Variables
+const int stepsPerRevolution = 2048;  // Steps for one full revolution
+const int stepsFor180 = stepsPerRevolution / 2;  // Steps for 180 degrees
+int motorSpeed = 1000;    // Delay between steps (microseconds)
+bool isAt180 = false;     // Tracks if motor is at 180 degrees
+bool reverseDirection = false;  // Tracks motor direction
 
-// 모터 제어 관련 변수
-const int stepsPerRevolution = 2048;  // 한 바퀴 회전에 필요한 스텝 수 (모터 사양에 따라 다를 수 있음)
-const int stepsFor180 = stepsPerRevolution / 2;  // 180도 회전에 필요한 스텝 수
-int currentPosition = 0;  // 현재 모터 위치
-int motorSpeed = 1000;    // 스텝 사이의 지연시간(마이크로초)
-bool isAt180 = false;     // 180도 위치 여부를 추적
-
-
-DHT dht(DHTPIN, DHTTYPE);  // DHT 객체 초기화
-
+DHT dht(DHTPIN, DHTTYPE);  // Initialize DHT object
 
 void setup() {
-  // 모터 신호핀을 출력으로 설정
+  // Set motor pins as output
   pinMode(motorPin1, OUTPUT);
   pinMode(motorPin2, OUTPUT);
   pinMode(motorPin3, OUTPUT);
   pinMode(motorPin4, OUTPUT);
-  
-  Serial.begin(9600);
-  Serial.println("DHT11 and Stepper Motor Control Test");
-  dht.begin();
-}
 
+  // Initialize LED Matrix
+  lc.shutdown(0, false);   // Turn on LED matrix
+  lc.setIntensity(0, 8);   // Set brightness (0-15)
+  lc.clearDisplay(0);      // Clear display
+
+  Serial.begin(9600);
+  Serial.println("DHT11, Stepper Motor, and Matrix LED Test");
+  dht.begin();
+} // End of setup
 
 void loop() {
-  // 습도 읽기
+  // Read humidity
   float h = dht.readHumidity();
-  
-  // 센서 데이터가 유효하지 않으면 다시 읽기
+
+  // Check if sensor data is valid
   if (isnan(h)) {
     Serial.println("Failed to read from DHT sensor!");
     return;
   }
-  
-  // 습도 출력
+
+  // Print humidity
   Serial.print("Humidity: ");
   Serial.print(h);
   Serial.println(" %");
-  
-  // 습도가 60% 이상일 때 180도로 회전
+
+  // Rotate to 180 degrees if humidity > 60%
   if (h > 60 && !isAt180) {
     Serial.println("Motor: Rotating to 180 degrees");
     rotateTo180();
     isAt180 = true;
-  } 
-  // 습도가 60% 미만일 때 0도로 복귀
+    displaySmileyFace(); // Show smiley face on LED
+  }
+  // Return to 0 degrees if humidity <= 60%
   else if (h <= 60 && isAt180) {
     Serial.println("Motor: Returning to 0 degrees");
     returnToZero();
     isAt180 = false;
+    lc.clearDisplay(0); // Clear LED display
   }
-  
-  delay(2000); // 2초마다 센서 값을 읽음
+
+  delay(2000); // Read sensor data every 2 seconds
 }
 
-
-// 180도 위치로 회전
+// Rotate to 180 degrees
 void rotateTo180() {
-  for(int i = 0; i < stepsFor180; i++) {
-    clockwise();
+  if (!reverseDirection) {
+    for (int i = 0; i < stepsFor180; i++) {
+      clockwise();
+    }
+  } else {
+    for (int i = 0; i < stepsFor180; i++) {
+      counterClockwise();
+    }
   }
-  currentPosition = stepsFor180;
+  reverseDirection = !reverseDirection;  // Reverse direction
 }
 
-
-// 0도 위치로 복귀
+// Return to 0 degrees
 void returnToZero() {
-  for(int i = 0; i < stepsFor180; i++) {
-    counterClockwise();
+  if (!reverseDirection) {
+    for (int i = 0; i < stepsFor180; i++) {
+      clockwise();
+    }
+  } else {
+    for (int i = 0; i < stepsFor180; i++) {
+      counterClockwise();
+    }
   }
-  currentPosition = 0;
+  reverseDirection = !reverseDirection;  // Reverse direction
 }
 
-
-// 한 스텝 시계 방향 회전
+// Rotate one step clockwise
 void clockwise() {
-  for(int i = 7; i >= 0; i--) {
+  for (int i = 7; i >= 0; i--) {
     motorSignalOutput(i);
     delayMicroseconds(motorSpeed);
   }
 }
 
-
-// 한 스텝 반시계 방향 회전
+// Rotate one step counterclockwise
 void counterClockwise() {
-  for(int i = 0; i < 8; i++) {
+  for (int i = 0; i < 8; i++) {
     motorSignalOutput(i);
     delayMicroseconds(motorSpeed);
   }
 }
 
-
-// 모터 정지
-void motorStop() {
-  motorSignalOutput(8); // 8번째 신호(B0000)를 출력하여 정지
-}
-
-
-// 모터 신호 출력 함수
+// Output motor signals
 void motorSignalOutput(int out) {
   digitalWrite(motorPin1, bitRead(steps[out], 0));
   digitalWrite(motorPin2, bitRead(steps[out], 1));
@@ -123,3 +144,22 @@ void motorSignalOutput(int out) {
   digitalWrite(motorPin4, bitRead(steps[out], 3));
 }
 
+// Display smiley face on LED Matrix
+void displaySmileyFace() {
+  // Define smiley face pattern
+  byte smileyFace[8] = {
+    B00000000, //                
+    B01100110, //  **  **  (eyes)
+    B10011001, // *  **  * (eyes)
+    B00000000, //                
+    B00000000, //                
+    B00000000, //   
+    B00000000, //                
+    B00000000  //                
+  };
+
+  // Output pattern to LED Matrix
+  for (int i = 0; i < 8; i++) {
+    lc.setRow(0, i, smileyFace[i]);
+  }
+}
