@@ -1,5 +1,4 @@
 #include <Adafruit_Sensor.h>
-
 #include <Servo.h>
 #include <LedControl.h>
 #include <DHT11.h>
@@ -34,9 +33,9 @@ void setup() {
 
   // MAX7219 초기화
   lc.shutdown(0, false); // 모듈 활성화
-  lc.setIntensity(0, 8); // 밝기 설정 (0~15)
-  lc.clearDisplay(0);    // 초기화
-  displayFace();         // ^^ 표정 표시
+  lc.setIntensity(0, 8);  // 밝기 설정 (0~15)
+  lc.clearDisplay(0);     // 화면 초기화
+  displayFace(0);         // 초기 표정 표시 (. - .)
 
   // 시리얼 모니터 초기화
   Serial.begin(9600);
@@ -72,6 +71,15 @@ void loop() {
     Serial.print("%, Temperature: ");
     Serial.print(temperature);
     Serial.println("°C");
+
+    // 습도에 따라 얼굴 변경
+    if (humidity >= 60) {
+      displayFace(2); 
+    } else if (humidity >= 30) {
+      displayFace(0);
+    } else {
+      displayFace(1);
+    }
   } else {
     // 에러 메시지 출력
     Serial.print("DHT11 error: ");
@@ -81,20 +89,54 @@ void loop() {
   delay(1000); // 데이터 업데이트 주기
 }
 
-// MAX7219에 ^^ 표정을 표시하는 함수
-void displayFace() {
-  byte smile[8] = {
-    0b00111100,
-    0b01000010,
-    0b10100101,
-    0b10000001,
-    0b10100101,
-    0b10011001,
-    0b01000010,
-    0b00111100
+// MAX7219에 얼굴 모양을 표시하는 함수
+void displayFace(int faceType) {
+  // 표정 데이터
+  byte neutralFace[8] = {
+    B00000000,
+    B00000000,
+    B01000010,
+    B01000010,
+    B01000010,
+    B00000000,
+    B00111100,
+    B00000000
   };
 
+  byte smileFace[8] = {
+    B00000100,
+    B00000010,
+    B00100100,
+    B01000000,
+    B01000000,
+    B00100100,
+    B00000010,
+    B00000100
+  };
+
+  byte sadFace[8] = {
+    B00000100,
+    B00001100,
+    B01000100,
+    B00100000,
+    B00100000,
+    B01000100,
+    B00001100,
+    B00000100
+  };
+
+  // 표정 선택
+  byte* selectedFace;
+  if (faceType == 2) {
+    selectedFace = sadFace;  
+  } else if (faceType == 1) {
+    selectedFace = smileFace; 
+  } else {
+    selectedFace = neutralFace; 
+  }
+
+  // MAX7219에 표정 출력
   for (int row = 0; row < 8; row++) {
-    lc.setRow(0, row, smile[row]);
+    lc.setRow(0, row, selectedFace[row]);
   }
 }
