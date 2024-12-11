@@ -1,3 +1,15 @@
+/*-------------------------------------
+  Module Name : Humid_Control.ino
+
+  REVISION HISTORY in GitHub
+  Link : https://github.com/embedded-weathering-with-you/my_name_is_sunny
+
+  Description : 
+  This module is the implementation code 
+  for the Smart Teru Teru Bozu Bot project presented 
+  in the Embedded Software lecture.
+-------------------------------------*/
+
 #include <Adafruit_Sensor.h>
 #include <Servo.h>
 #include <LedControl.h>
@@ -11,22 +23,13 @@
 #define MAX7219_CLK_PIN 13
 // DHT11 핀
 #define DHT_PIN 2
-// 버튼 핀
-#define BUTTON_PIN 3
 
 // 객체 생성
 Servo myServo;
 LedControl lc = LedControl(MAX7219_DIN_PIN, MAX7219_CLK_PIN, MAX7219_CS_PIN, 1);
 DHT11 dht(DHT_PIN); // DHT11 객체 생성 및 핀 번호 전달
 
-// 버튼 및 서보 상태 변수
-bool buttonPressed = false;
-bool servoState = false;
-
 void setup() {
-  // 핀 설정
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
-
   // 서보모터 초기화
   myServo.attach(SERVO_PIN);
   myServo.write(0); // 초기 위치
@@ -35,32 +38,14 @@ void setup() {
   lc.shutdown(0, false); // 모듈 활성화
   lc.setIntensity(0, 8);  // 밝기 설정 (0~15)
   lc.clearDisplay(0);     // 화면 초기화
-  displayFace(0);         // 초기 표정 표시 (. - .)
+  displayFace(0);         // 초기 표정 표시 (중립)
 
   // 시리얼 모니터 초기화
   Serial.begin(9600);
-  Serial.println("System ready");
 }
 
 void loop() {
-  // 버튼 상태 확인
-  int buttonState = digitalRead(BUTTON_PIN);
-
-  if (buttonState == LOW && !buttonPressed) { // 버튼 눌림
-    buttonPressed = true;
-    if (servoState) {
-      myServo.write(0);    // 0도로 이동
-      servoState = false;  // 상태 변경
-    } else {
-      myServo.write(180);  // 180도로 이동
-      servoState = true;   // 상태 변경
-    }
-    delay(500); // 안정화를 위한 딜레이
-  } else if (buttonState == HIGH && buttonPressed) {
-    buttonPressed = false; // 버튼 상태 초기화
-  }
-
-  // DHT11 데이터 읽기
+  // DHT11 습도 센서 데이터 읽기
   int temperature, humidity;
   int result = dht.readTemperatureHumidity(temperature, humidity);
 
@@ -72,13 +57,16 @@ void loop() {
     Serial.print(temperature);
     Serial.println("°C");
 
-    // 습도에 따라 얼굴 변경
+    // 습도에 따라 얼굴 및 서보모터 동작 변경
     if (humidity >= 60) {
-      displayFace(2); 
+      displayFace(2); // 우는 표정
+      myServo.write(180); // 180도 이동
     } else if (humidity >= 30) {
-      displayFace(0);
+      displayFace(0); // 무표정
+      myServo.write(0); // 0도 이동
     } else {
-      displayFace(1);
+      displayFace(1); // 웃는 표정
+      myServo.write(0); // 0도 이동
     }
   } else {
     // 에러 메시지 출력
@@ -89,10 +77,10 @@ void loop() {
   delay(1000); // 데이터 업데이트 주기
 }
 
-// MAX7219에 얼굴 모양을 표시하는 함수
+// 8*8 도트 매트릭스 표정 함수
 void displayFace(int faceType) {
   // 표정 데이터
-  byte neutralFace[8] = {
+  byte neutralFace[8] = { // 무표정
     B00000000,
     B00001110,
     B01000000,
@@ -103,7 +91,7 @@ void displayFace(int faceType) {
     B00000000
   };
 
-  byte smileFace[8] = {
+  byte smileFace[8] = { // 웃는 얼굴
     B00000100,
     B00000010,
     B00100100,
@@ -114,7 +102,7 @@ void displayFace(int faceType) {
     B00000100
   };
 
-  byte sadFace[8] = {
+  byte sadFace[8] = { // 우는 표정
     B00000100,
     B00011100,
     B01000100,
@@ -135,7 +123,7 @@ void displayFace(int faceType) {
     selectedFace = neutralFace; 
   }
 
-  // MAX7219에 표정 출력
+  // 도트 매트릭스에에 표정 출력
   for (int row = 0; row < 8; row++) {
     lc.setRow(0, row, selectedFace[row]);
   }
