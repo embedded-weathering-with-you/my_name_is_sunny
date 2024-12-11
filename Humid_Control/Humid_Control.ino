@@ -1,165 +1,100 @@
-/*--------------------------------------------
-Module Name : Humid_Control.ino
+#include <Adafruit_Sensor.h>
 
-REVISION HISTORY in GitHub:
-URL : https://github.com/embedded-weathering-with-you/today_is_sunny
-
-Description : 
-This code is for a smart Teru Teru Bozu bot.
-It uses a DHT11 sensor, a stepper motor, and a MAX7219 LED matrix.
---------------------------------------------*/
-
-// Include necessary libraries
-#include "DHT.h"
+#include <Servo.h>
 #include <LedControl.h>
+#include <DHT11.h>
 
-// DHT11 Sensor Configuration
-#define DHTPIN 6        // DHT sensor pin
-#define DHTTYPE DHT11   // DHT11 sensor type
+// 서보모터 핀
+#define SERVO_PIN 9
+// MAX7219 핀
+#define MAX7219_DIN_PIN 11
+#define MAX7219_CS_PIN 10
+#define MAX7219_CLK_PIN 13
+// DHT11 핀
+#define DHT_PIN 2
+// 버튼 핀
+#define BUTTON_PIN 3
 
-// Stepper Motor Pin Configuration
-const int motorPin1 = 5;    // IN1
-const int motorPin2 = 4;    // IN2
-const int motorPin3 = 3;    // IN3
-const int motorPin4 = 2;    // IN4
+// 객체 생성
+Servo myServo;
+LedControl lc = LedControl(MAX7219_DIN_PIN, MAX7219_CLK_PIN, MAX7219_CS_PIN, 1);
+DHT11 dht(DHT_PIN); // DHT11 객체 생성 및 핀 번호 전달
 
-// MAX7219 Matrix LED Pin Configuration
-#define DIN 11
-#define CLK 13
-#define CS 10
-
-LedControl lc = LedControl(DIN, CLK, CS, 1);
-
-// Stepper Motor Steps Configuration
-const int steps[] = {B1000, B1100, B0100, B0110, B0010, B0011, B0001, B1001, B0000};
-
-// Stepper Motor Variables
-const int stepsPerRevolution = 2048;  // Steps for one full revolution
-const int stepsFor180 = stepsPerRevolution / 2;  // Steps for 180 degrees
-int motorSpeed = 1000;    // Delay between steps (microseconds)
-bool isAt180 = false;     // Tracks if motor is at 180 degrees
-bool reverseDirection = false;  // Tracks motor direction
-
-DHT dht(DHTPIN, DHTTYPE);  // Initialize DHT object
+// 버튼 및 서보 상태 변수
+bool buttonPressed = false;
+bool servoState = false;
 
 void setup() {
-  // Set motor pins as output
-  pinMode(motorPin1, OUTPUT);
-  pinMode(motorPin2, OUTPUT);
-  pinMode(motorPin3, OUTPUT);
-  pinMode(motorPin4, OUTPUT);
+  // 핀 설정
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
 
-  // Initialize LED Matrix
-  lc.shutdown(0, false);   // Turn on LED matrix
-  lc.setIntensity(0, 8);   // Set brightness (0-15)
-  lc.clearDisplay(0);      // Clear display
+  // 서보모터 초기화
+  myServo.attach(SERVO_PIN);
+  myServo.write(0); // 초기 위치
 
+  // MAX7219 초기화
+  lc.shutdown(0, false); // 모듈 활성화
+  lc.setIntensity(0, 8); // 밝기 설정 (0~15)
+  lc.clearDisplay(0);    // 초기화
+  displayFace();         // ^^ 표정 표시
+
+  // 시리얼 모니터 초기화
   Serial.begin(9600);
-  Serial.println("DHT11, Stepper Motor, and Matrix LED Test");
-  dht.begin();
-} // End of setup
+  Serial.println("System ready");
+}
 
 void loop() {
-  // Read humidity
-  float h = dht.readHumidity();
+  // 버튼 상태 확인
+  int buttonState = digitalRead(BUTTON_PIN);
 
-  // Check if sensor data is valid
-  if (isnan(h)) {
-    Serial.println("Failed to read from DHT sensor!");
-    return;
-  }
-
-  // Print humidity
-  Serial.print("Humidity: ");
-  Serial.print(h);
-  Serial.println(" %");
-
-  // Rotate to 180 degrees if humidity > 60%
-  if (h > 60 && !isAt180) {
-    Serial.println("Motor: Rotating to 180 degrees");
-    rotateTo180();
-    isAt180 = true;
-    displaySmileyFace(); // Show smiley face on LED
-  }
-  // Return to 0 degrees if humidity <= 60%
-  else if (h <= 60 && isAt180) {
-    Serial.println("Motor: Returning to 0 degrees");
-    returnToZero();
-    isAt180 = false;
-    lc.clearDisplay(0); // Clear LED display
-  }
-
-  delay(2000); // Read sensor data every 2 seconds
-}
-
-// Rotate to 180 degrees
-void rotateTo180() {
-  if (!reverseDirection) {
-    for (int i = 0; i < stepsFor180; i++) {
-      clockwise();
+  if (buttonState == LOW && !buttonPressed) { // 버튼 눌림
+    buttonPressed = true;
+    if (servoState) {
+      myServo.write(0);    // 0도로 이동
+      servoState = false;  // 상태 변경
+    } else {
+      myServo.write(180);  // 180도로 이동
+      servoState = true;   // 상태 변경
     }
+    delay(500); // 안정화를 위한 딜레이
+  } else if (buttonState == HIGH && buttonPressed) {
+    buttonPressed = false; // 버튼 상태 초기화
+  }
+
+  // DHT11 데이터 읽기
+  int temperature, humidity;
+  int result = dht.readTemperatureHumidity(temperature, humidity);
+
+  if (result == 0) { // 데이터 읽기 성공
+    // 시리얼 모니터에 출력
+    Serial.print("Humidity: ");
+    Serial.print(humidity);
+    Serial.print("%, Temperature: ");
+    Serial.print(temperature);
+    Serial.println("°C");
   } else {
-    for (int i = 0; i < stepsFor180; i++) {
-      counterClockwise();
-    }
+    // 에러 메시지 출력
+    Serial.print("DHT11 error: ");
+    Serial.println(dht.getErrorString(result));
   }
-  reverseDirection = !reverseDirection;  // Reverse direction
+
+  delay(1000); // 데이터 업데이트 주기
 }
 
-// Return to 0 degrees
-void returnToZero() {
-  if (!reverseDirection) {
-    for (int i = 0; i < stepsFor180; i++) {
-      clockwise();
-    }
-  } else {
-    for (int i = 0; i < stepsFor180; i++) {
-      counterClockwise();
-    }
-  }
-  reverseDirection = !reverseDirection;  // Reverse direction
-}
-
-// Rotate one step clockwise
-void clockwise() {
-  for (int i = 7; i >= 0; i--) {
-    motorSignalOutput(i);
-    delayMicroseconds(motorSpeed);
-  }
-}
-
-// Rotate one step counterclockwise
-void counterClockwise() {
-  for (int i = 0; i < 8; i++) {
-    motorSignalOutput(i);
-    delayMicroseconds(motorSpeed);
-  }
-}
-
-// Output motor signals
-void motorSignalOutput(int out) {
-  digitalWrite(motorPin1, bitRead(steps[out], 0));
-  digitalWrite(motorPin2, bitRead(steps[out], 1));
-  digitalWrite(motorPin3, bitRead(steps[out], 2));
-  digitalWrite(motorPin4, bitRead(steps[out], 3));
-}
-
-// Display smiley face on LED Matrix
-void displaySmileyFace() {
-  // Define smiley face pattern
-  byte smileyFace[8] = {
-    B00000000, //                
-    B01100110, //  **  **  (eyes)
-    B10011001, // *  **  * (eyes)
-    B00000000, //                
-    B00000000, //                
-    B00000000, //   
-    B00000000, //                
-    B00000000  //                
+// MAX7219에 ^^ 표정을 표시하는 함수
+void displayFace() {
+  byte smile[8] = {
+    0b00111100,
+    0b01000010,
+    0b10100101,
+    0b10000001,
+    0b10100101,
+    0b10011001,
+    0b01000010,
+    0b00111100
   };
 
-  // Output pattern to LED Matrix
-  for (int i = 0; i < 8; i++) {
-    lc.setRow(0, i, smileyFace[i]);
+  for (int row = 0; row < 8; row++) {
+    lc.setRow(0, row, smile[row]);
   }
 }
