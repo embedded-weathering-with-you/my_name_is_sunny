@@ -116,7 +116,7 @@ void displayFace(int faceType) {
   // 표정 선택
   byte* selectedFace;
   if (faceType == 2) {
-    selectedFace = sadFace;  
+    selectedFace = sadFace`  
   } else if (faceType == 1) {
     selectedFace = smileFace; 
   } else {
